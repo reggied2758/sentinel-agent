@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sentinel-agent"
+version = "0.1.0"
+description = "Agentic AI security platform for automated DevSecOps vulnerability detection and remediation"
+requires-python = ">=3.13"
+dependencies = [
+    "openai>=3.5.0",
+]
+
+[project.scripts]
+sentinel = "agent.security_agent:main"
+
+[tool.setuptools]
+packages = ["agent", "scanner", "security", "ai_security"]

@@ -45,10 +45,14 @@ def run_agent(target):
     return findings
 
 
-if __name__ == "__main__":
+def main():
     if len(sys.argv) != 2:
-        print("Usage: python -m agent.security_agent <target>")
+        print("Usage: sentinel <target>")
         sys.exit(1)
 
     target = sys.argv[1]
     run_agent(target)
+
+
+if __name__ == "__main__":
+    main()

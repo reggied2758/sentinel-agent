@@ -46,11 +46,26 @@ def run_agent(target):
 
 
 def main():
-    if len(sys.argv) != 2:
-        print("Usage: sentinel <target>")
+    if len(sys.argv) == 2 and sys.argv[1] in ("--help", "-h"):
+        print("Sentinel Security Agent")
+        print()
+        print("Usage:")
+        print("  sentinel scan <target>")
+        print()
+        print("Commands:")
+        print("  scan    Scan a project for security vulnerabilities")
+        print()
+        print("Examples:")
+        print("  sentinel scan vulnerable_app/")
+        print("  sentinel scan clean_app/")
+        return
+
+    if len(sys.argv) != 3 or sys.argv[1] != "scan":
+        print("Usage: sentinel scan <target>")
+        print("Run 'sentinel --help' for more information.")
         sys.exit(1)
 
-    target = sys.argv[1]
+    target = sys.argv[2]
     run_agent(target)
 
 

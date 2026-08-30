@@ -7,7 +7,7 @@ from agent.ai_analyzer import analyze_finding
 from agent.report import generate_report
 
 
-def run_agent(target):
+def run_agent(target, use_ai=True):
     target_path = Path(target)
 
     if not target_path.exists():
@@ -32,7 +32,16 @@ def run_agent(target):
             f"{finding.rule}"
         )
 
-        analysis = analyze_finding(finding)
+        if use_ai:
+            analysis = analyze_finding(finding)
+        else:
+            analysis = {
+                "risk": finding.rule,
+                "explanation": "AI analysis disabled.",
+                "impact": "See the scanner finding for technical details.",
+                "recommendation": "Review and remediate the finding manually.",
+            }
+
         analyses.append(analysis)
 
         print(f"Risk: {analysis['risk']}")
@@ -51,22 +60,36 @@ def main():
         print()
         print("Usage:")
         print("  sentinel scan <target>")
+        print("  sentinel scan <target> --no-ai")
         print()
         print("Commands:")
         print("  scan    Scan a project for security vulnerabilities")
         print()
+        print("Options:")
+        print("  --no-ai    Run scanners without AI analysis")
+        print()
         print("Examples:")
         print("  sentinel scan vulnerable_app/")
+        print("  sentinel scan vulnerable_app/ --no-ai")
         print("  sentinel scan clean_app/")
         return
 
-    if len(sys.argv) != 3 or sys.argv[1] != "scan":
-        print("Usage: sentinel scan <target>")
+    if len(sys.argv) not in (3, 4) or sys.argv[1] != "scan":
+        print("Usage: sentinel scan <target> [--no-ai]")
         print("Run 'sentinel --help' for more information.")
         sys.exit(1)
 
     target = sys.argv[2]
-    run_agent(target)
+
+    if len(sys.argv) == 4:
+        if sys.argv[3] != "--no-ai":
+            print(f"Unknown option: {sys.argv[3]}")
+            print("Run 'sentinel --help' for more information.")
+            sys.exit(1)
+
+        run_agent(target, use_ai=False)
+    else:
+        run_agent(target)
 
 
 if __name__ == "__main__":

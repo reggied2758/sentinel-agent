@@ -41,3 +41,63 @@ def test_prioritize_empty_list():
     result = prioritize([])
 
     assert result == []
+
+
+def test_deduplicates_identical_findings():
+    finding = SecurityFinding(
+        "bandit",
+        "B602",
+        "HIGH",
+        "app.py",
+        19,
+        "shell=True",
+    )
+
+    result = prioritize([finding, finding])
+
+    assert len(result) == 1
+    assert result[0].finding_id == finding.finding_id
+
+
+def test_finding_id_is_stable():
+    finding_one = SecurityFinding(
+        "bandit",
+        "B602",
+        "HIGH",
+        "app.py",
+        19,
+        "shell=True",
+    )
+
+    finding_two = SecurityFinding(
+        "bandit",
+        "B602",
+        "HIGH",
+        "app.py",
+        19,
+        "shell=True",
+    )
+
+    assert finding_one.finding_id == finding_two.finding_id
+
+
+def test_different_findings_have_different_ids():
+    finding_one = SecurityFinding(
+        "bandit",
+        "B602",
+        "HIGH",
+        "app.py",
+        19,
+        "shell=True",
+    )
+
+    finding_two = SecurityFinding(
+        "bandit",
+        "B608",
+        "MEDIUM",
+        "app.py",
+        10,
+        "SQL injection",
+    )
+
+    assert finding_one.finding_id != finding_two.finding_id

@@ -38,6 +38,7 @@ def build_report_data(findings, analyses):
     for finding, analysis in zip(findings, analyses):
         report["findings"].append(
             {
+                "id": finding.finding_id,
                 "tool": finding.tool,
                 "rule": finding.rule,
                 "severity": finding.severity,
@@ -94,6 +95,10 @@ def generate_markdown_report(report):
             file.write(
                 f"### {index}. [{finding['severity']}] "
                 f"{finding['tool']} - {finding['rule']}\n\n"
+            )
+
+            file.write(
+                f"**Finding ID:** `{finding['id']}`\n\n"
             )
 
             file.write(
@@ -282,6 +287,11 @@ h1 {
     margin-top: 6px;
 }
 
+.id {
+    font-family: monospace;
+    margin-top: 6px;
+}
+
 .section {
     margin-top: 18px;
 }
@@ -397,6 +407,10 @@ footer {
                 str(finding["severity"]).lower()
             )
 
+            finding_id = html.escape(
+                str(finding["id"])
+            )
+
             tool = html.escape(str(finding["tool"]))
             rule = html.escape(str(finding["rule"]))
             finding_file = html.escape(
@@ -422,6 +436,10 @@ footer {
     <strong>
         {tool} - {rule}
     </strong>
+
+    <div class="id">
+        {finding_id}
+    </div>
 
     <div class="meta">
         {finding_file}:{line}

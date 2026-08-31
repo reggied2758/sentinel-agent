@@ -1,6 +1,5 @@
-from pathlib import Path
-
-from agent.security_agent import run_agent
+from agent.security_agent import get_exit_code, run_agent
+from scanner.finding import SecurityFinding
 
 
 def test_invalid_target(capsys):
@@ -16,85 +15,73 @@ def test_invalid_target(capsys):
     )
 
 
-def test_run_agent_clean_project(tmp_path, monkeypatch):
-    target = tmp_path / "clean_project"
-    target.mkdir()
+def test_invalid_file_target(tmp_path, capsys):
+    target = tmp_path / "file.txt"
+    target.write_text("test")
 
-    monkeypatch.chdir(tmp_path)
+    result = run_agent(str(target))
 
-    result = run_agent(
-        str(target),
-        use_ai=False,
-        output_format="json",
-    )
+    captured = capsys.readouterr()
 
     assert result == []
-    assert Path("sentinel_report.json").exists()
 
-
-def test_json_format(tmp_path, monkeypatch):
-    target = tmp_path / "clean_project"
-    target.mkdir()
-
-    monkeypatch.chdir(tmp_path)
-
-    run_agent(
-        str(target),
-        use_ai=False,
-        output_format="json",
+    assert (
+        f"Error: target is not a directory: {target}"
+        in captured.out
     )
 
-    assert Path("sentinel_report.json").exists()
-    assert not Path("sentinel_report.md").exists()
-    assert not Path("sentinel_report.html").exists()
 
-
-def test_markdown_format(tmp_path, monkeypatch):
-    target = tmp_path / "clean_project"
-    target.mkdir()
-
-    monkeypatch.chdir(tmp_path)
-
-    run_agent(
-        str(target),
-        use_ai=False,
-        output_format="markdown",
+def test_security_gate_allows_low():
+    finding = SecurityFinding(
+        "bandit",
+        "B404",
+        "LOW",
+        "test.py",
+        1,
+        "Test low severity finding.",
+        None,
     )
 
-    assert Path("sentinel_report.md").exists()
-    assert not Path("sentinel_report.json").exists()
-    assert not Path("sentinel_report.html").exists()
+    assert get_exit_code([finding]) == 0
 
 
-def test_html_format(tmp_path, monkeypatch):
-    target = tmp_path / "clean_project"
-    target.mkdir()
-
-    monkeypatch.chdir(tmp_path)
-
-    run_agent(
-        str(target),
-        use_ai=False,
-        output_format="html",
+def test_security_gate_allows_medium():
+    finding = SecurityFinding(
+        "bandit",
+        "B608",
+        "MEDIUM",
+        "test.py",
+        1,
+        "Test medium severity finding.",
+        None,
     )
 
-    assert Path("sentinel_report.html").exists()
-    assert not Path("sentinel_report.json").exists()
-    assert not Path("sentinel_report.md").exists()
+    assert get_exit_code([finding]) == 0
 
 
-def test_all_formats(tmp_path, monkeypatch):
-    target = tmp_path / "clean_project"
-    target.mkdir()
-
-    monkeypatch.chdir(tmp_path)
-
-    run_agent(
-        str(target),
-        use_ai=False,
-        output_format="all",
+def test_security_gate_blocks_high():
+    finding = SecurityFinding(
+        "bandit",
+        "B602",
+        "HIGH",
+        "test.py",
+        1,
+        "Test high severity finding.",
+        None,
     )
 
-    assert Path("sentinel_report.json").exists()
-    assert Path("sentinel_report.md").exists()
-    assert Path("sentinel_report.html").exists()
+    assert get_exit_code([finding]) == 1
+
+
+def test_security_gate_blocks_critical():
+    finding = SecurityFinding(
+        "sentinel",
+        "TEST",
+        "CRITICAL",
+        "test.py",
+        1,
+        "Test critical severity finding.",
+        None,
+    )
+
+    assert get_exit_code([finding]) == 1

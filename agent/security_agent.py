@@ -8,6 +8,7 @@ from agent.report import generate_report
 
 
 VALID_FORMATS = {"json", "markdown", "html", "all"}
+BLOCKING_SEVERITIES = {"HIGH", "CRITICAL"}
 
 
 def run_agent(target, use_ai=True, output_format="all"):
@@ -70,6 +71,18 @@ def run_agent(target, use_ai=True, output_format="all"):
     return findings
 
 
+def get_exit_code(findings):
+    """
+    Return a non-zero exit code when HIGH or CRITICAL
+    security findings are present.
+    """
+    for finding in findings:
+        if finding.severity in BLOCKING_SEVERITIES:
+            return 1
+
+    return 0
+
+
 def print_help():
     print("Sentinel Security Agent")
     print()
@@ -91,6 +104,9 @@ def print_help():
         "  --format <format>   Output format: "
         "json, markdown, html, all"
     )
+    print()
+    print("Security gate:")
+    print("  HIGH and CRITICAL findings cause a non-zero exit.")
     print()
     print("Examples:")
     print("  sentinel scan vulnerable_app/")
@@ -163,11 +179,13 @@ def main():
             )
             sys.exit(1)
 
-    run_agent(
+    findings = run_agent(
         target,
         use_ai=use_ai,
         output_format=output_format,
     )
+
+    sys.exit(get_exit_code(findings))
 
 
 if __name__ == "__main__":

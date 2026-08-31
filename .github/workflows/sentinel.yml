@@ -41,35 +41,12 @@ jobs:
       - name: Run tests
         run: pytest
 
-      - name: Diagnose Bandit findings
+      - name: Run Bandit
         run: |
           bandit \
-            -r . \
-            --exclude ./.venv,./.git,./vulnerable_app \
+            -r agent scanner \
             -f json \
-            -o bandit-report.json || true
-
-          python - <<'PY'
-          import json
-
-          with open("bandit-report.json") as f:
-              data = json.load(f)
-
-          findings = data.get("results", [])
-
-          print(f"Bandit findings: {len(findings)}")
-          print()
-
-          for finding in findings:
-              print(
-                  f"{finding.get('issue_severity')} "
-                  f"{finding.get('test_id')} "
-                  f"{finding.get('filename')}:"
-                  f"{finding.get('line_number')}"
-              )
-              print(f"  {finding.get('issue_text')}")
-              print()
-          PY
+            -o bandit-report.json
 
       - name: Run Gitleaks
         run: |
@@ -77,20 +54,13 @@ jobs:
             --source . \
             --no-git \
             --report-format json \
-            --report-path gitleaks-report.json || true
-
-          if [ -s gitleaks-report.json ]; then
-            cat gitleaks-report.json
-          else
-            echo "No Gitleaks findings."
-          fi
+            --report-path gitleaks-report.json
 
       - name: Run pip-audit
         run: |
           if [ -f vulnerable_app/requirements.txt ]; then
             pip-audit \
-              -r vulnerable_app/requirements.txt \
-              -f json
+              -r vulnerable_app/requirements.txt
           else
             echo "No vulnerable_app/requirements.txt found."
           fi

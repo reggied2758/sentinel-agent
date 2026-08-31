@@ -1,6 +1,6 @@
 import json
 import os
-import subprocess
+import subprocess  # nosec B404
 import tempfile
 
 from scanner.finding import SecurityFinding
@@ -28,33 +28,72 @@ def run_gitleaks(target, exclude_paths=None):
             report_path,
         ]
 
-        for exclude_path in exclude_paths:
-            command.extend(
-                [
-                    "--exclude-path",
-                    exclude_path,
-                ]
-            )
-
-        subprocess.run(
+        result = subprocess.run(  # nosec B603
             command,
             capture_output=True,
             text=True,
         )
 
         if not os.path.exists(report_path):
-            return []
+            return {
+                "results": [],
+                "error": (
+                    result.stderr.strip()
+                    or "Gitleaks did not produce a report."
+                ),
+            }
 
         with open(report_path, "r") as file:
             content = file.read()
 
         if not content.strip():
-            return []
+            if result.returncode not in (0, 1):
+                return {
+                    "results": [],
+                    "error": (
+                        result.stderr.strip()
+                        or (
+                            "Gitleaks exited with "
+                            f"code {result.returncode}."
+                        )
+                    ),
+                }
 
-        return json.loads(content)
+            return {
+                "results": [],
+                "error": None,
+            }
 
-    except (json.JSONDecodeError, OSError):
-        return []
+        try:
+            results = json.loads(content)
+        except json.JSONDecodeError:
+            return {
+                "results": [],
+                "error": "Gitleaks returned invalid JSON.",
+            }
+
+        if result.returncode not in (0, 1):
+            return {
+                "results": results,
+                "error": (
+                    result.stderr.strip()
+                    or (
+                        "Gitleaks exited with "
+                        f"code {result.returncode}."
+                    )
+                ),
+            }
+
+        return {
+            "results": results,
+            "error": None,
+        }
+
+    except OSError as exc:
+        return {
+            "results": [],
+            "error": str(exc),
+        }
 
     finally:
         if os.path.exists(report_path):
@@ -64,23 +103,44 @@ def run_gitleaks(target, exclude_paths=None):
 def normalize_findings(data):
     findings = []
 
-    for result in data:
-        finding = SecurityFinding(
-            tool="gitleaks",
-            rule=result["RuleID"],
-            severity="HIGH",
-            file=result["File"],
-            line=result["StartLine"],
-            message=result["Description"],
+    for result in data.get("results", []):
+        findings.append(
+            SecurityFinding(
+                tool="gitleaks",
+                rule=result.get(
+                    "RuleID",
+                    "UNKNOWN",
+                ),
+                severity="HIGH",
+                file=result.get(
+                    "File",
+                    "unknown",
+                ),
+                line=result.get(
+                    "StartLine",
+                    0,
+                ),
+                message=result.get(
+                    "Description",
+                    "",
+                ),
+            )
         )
-
-        findings.append(finding)
 
     return findings
 
 
 if __name__ == "__main__":
-    data = run_gitleaks("vulnerable_app/")
+    data = run_gitleaks(
+        "vulnerable_app/"
+    )
+
+    if data.get("error"):
+        print(
+            f"Gitleaks error: "
+            f"{data['error']}"
+        )
+
     findings = normalize_findings(data)
 
     for finding in findings:

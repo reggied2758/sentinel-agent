@@ -14,8 +14,12 @@ from scanner.pip_audit_scanner import (
 )
 
 
-def run_security_scan(target, exclude_paths=None):
+def run_security_scan(
+    target,
+    exclude_paths=None,
+):
     findings = []
+    errors = []
 
     exclude_paths = exclude_paths or []
 
@@ -24,17 +28,48 @@ def run_security_scan(target, exclude_paths=None):
         target,
         exclude_paths=exclude_paths,
     )
-    findings.extend(normalize_bandit(bandit_data))
+
+    findings.extend(
+        normalize_bandit(
+            bandit_data
+        )
+    )
+
+    for error in bandit_data.get(
+        "errors",
+        [],
+    ):
+        if error:
+            errors.append(
+                {
+                    "tool": "bandit",
+                    "message": error,
+                }
+            )
 
     # Gitleaks
     gitleaks_data = run_gitleaks(
         target,
         exclude_paths=exclude_paths,
     )
-    findings.extend(normalize_gitleaks(gitleaks_data))
+
+    findings.extend(
+        normalize_gitleaks(
+            gitleaks_data
+        )
+    )
+
+    if gitleaks_data.get("error"):
+        errors.append(
+            {
+                "tool": "gitleaks",
+                "message": gitleaks_data["error"],
+            }
+        )
 
     # pip-audit
     pip_audit_data = run_pip_audit(target)
+
     findings.extend(
         normalize_pip_audit(
             pip_audit_data,
@@ -42,11 +77,22 @@ def run_security_scan(target, exclude_paths=None):
         )
     )
 
-    return findings
+    if pip_audit_data.get("error"):
+        errors.append(
+            {
+                "tool": "pip-audit",
+                "message": pip_audit_data["error"],
+            }
+        )
+
+    return {
+        "findings": findings,
+        "errors": errors,
+    }
 
 
 if __name__ == "__main__":
-    findings = run_security_scan(
+    result = run_security_scan(
         "vulnerable_app/"
     )
 
@@ -54,9 +100,20 @@ if __name__ == "__main__":
         "\n=== Sentinel Agent Security Scan ===\n"
     )
 
-    for finding in findings:
+    for finding in result["findings"]:
         print(finding)
 
+    if result["errors"]:
+        print("\n=== Scanner Errors ===\n")
+
+        for error in result["errors"]:
+            print(
+                f"[ERROR] "
+                f"{error['tool']}: "
+                f"{error['message']}"
+            )
+
     print(
-        f"\nTotal findings: {len(findings)}"
+        f"\nTotal findings: "
+        f"{len(result['findings'])}"
     )

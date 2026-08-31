@@ -6,7 +6,16 @@ from openai import APIError, RateLimitError, APITimeoutError
 from scanner.finding import SecurityFinding
 
 
-client = OpenAI()
+client = None
+
+
+def get_client():
+    global client
+
+    if client is None:
+        client = OpenAI()
+
+    return client
 
 
 def analyze_finding(finding: SecurityFinding):
@@ -16,11 +25,17 @@ You are a cybersecurity analyst.
 Analyze this security finding:
 
 Tool: {finding.tool}
+
 Rule: {finding.rule}
+
 Severity: {finding.severity}
+
 File: {finding.file}
+
 Line: {finding.line}
+
 Message: {finding.message}
+
 CWE: {finding.cwe}
 
 Return ONLY valid JSON in this exact structure:
@@ -34,9 +49,9 @@ Return ONLY valid JSON in this exact structure:
 """
 
     try:
-        response = client.responses.create(
+        response = get_client().responses.create(
             model="gpt-5.6-luna",
-            input=prompt
+            input=prompt,
         )
 
         text = response.output_text
@@ -49,15 +64,21 @@ Return ONLY valid JSON in this exact structure:
                 "risk": finding.rule,
                 "explanation": text,
                 "impact": "",
-                "recommendation": ""
+                "recommendation": "",
             }
 
     except RateLimitError:
         return {
             "risk": finding.rule,
-            "explanation": "AI analysis unavailable because the API rate or credit limit was reached.",
+            "explanation": (
+                "AI analysis unavailable because the API "
+                "rate or credit limit was reached."
+            ),
             "impact": "",
-            "recommendation": "Review the scanner finding manually and check your OpenAI API billing and usage."
+            "recommendation": (
+                "Review the scanner finding manually and "
+                "check your OpenAI API billing and usage."
+            ),
         }
 
     except APITimeoutError:
@@ -65,7 +86,10 @@ Return ONLY valid JSON in this exact structure:
             "risk": finding.rule,
             "explanation": "AI analysis timed out.",
             "impact": "",
-            "recommendation": "Review the scanner finding manually and retry the analysis."
+            "recommendation": (
+                "Review the scanner finding manually and "
+                "retry the analysis."
+            ),
         }
 
     except APIError as error:
@@ -73,13 +97,21 @@ Return ONLY valid JSON in this exact structure:
             "risk": finding.rule,
             "explanation": f"AI analysis failed: {error}",
             "impact": "",
-            "recommendation": "Review the scanner finding manually and retry the analysis."
+            "recommendation": (
+                "Review the scanner finding manually and "
+                "retry the analysis."
+            ),
         }
 
     except Exception as error:
         return {
             "risk": finding.rule,
-            "explanation": f"Unexpected AI analysis error: {error}",
+            "explanation": (
+                f"Unexpected AI analysis error: {error}"
+            ),
             "impact": "",
-            "recommendation": "Review the scanner finding manually and retry the analysis."
+            "recommendation": (
+                "Review the scanner finding manually and "
+                "retry the analysis."
+            ),
         }

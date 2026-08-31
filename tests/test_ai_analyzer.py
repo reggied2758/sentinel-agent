@@ -17,14 +17,17 @@ def test_ai_api_error():
         78,
     )
 
-    with patch(
-        "agent.ai_analyzer.client.responses.create",
-        side_effect=APIError(
+    mock_client = patch(
+        "agent.ai_analyzer.get_client"
+    )
+
+    with mock_client as get_client:
+        get_client.return_value.responses.create.side_effect = APIError(
             "Test API failure",
             request=None,
             body=None,
-        ),
-    ):
+        )
+
         result = analyze_finding(finding)
 
     assert result["risk"] == "B602"

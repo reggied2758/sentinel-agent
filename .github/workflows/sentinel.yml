@@ -40,4 +40,4 @@ jobs:
         run: pytest
 
       - name: Run Sentinel security scan
-        run: sentinel scan . --no-ai --format json
+        run: sentinel scan . --no-ai --format json --exclude vulnerable_app

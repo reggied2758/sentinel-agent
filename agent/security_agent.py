@@ -11,7 +11,12 @@ VALID_FORMATS = {"json", "markdown", "html", "all"}
 BLOCKING_SEVERITIES = {"HIGH", "CRITICAL"}
 
 
-def run_agent(target, use_ai=True, output_format="all"):
+def run_agent(
+    target,
+    use_ai=True,
+    output_format="all",
+    exclude_paths=None,
+):
     target_path = Path(target)
 
     if not target_path.exists():
@@ -22,7 +27,10 @@ def run_agent(target, use_ai=True, output_format="all"):
         print(f"Error: target is not a directory: {target}")
         return []
 
-    findings = run_security_scan(target)
+    findings = run_security_scan(
+        target,
+        exclude_paths=exclude_paths,
+    )
     findings = prioritize(findings)
 
     print("\n=== Security Agent ===\n")
@@ -90,6 +98,7 @@ def print_help():
     print("  sentinel scan <target>")
     print("  sentinel scan <target> --no-ai")
     print("  sentinel scan <target> --format <format>")
+    print("  sentinel scan <target> --exclude <path>")
     print()
     print("Commands:")
     print(
@@ -104,20 +113,21 @@ def print_help():
         "  --format <format>   Output format: "
         "json, markdown, html, all"
     )
+    print(
+        "  --exclude <path>    Exclude a path from scanning"
+    )
     print()
     print("Security gate:")
-    print("  HIGH and CRITICAL findings cause a non-zero exit.")
+    print(
+        "  HIGH and CRITICAL findings cause a non-zero exit."
+    )
     print()
     print("Examples:")
     print("  sentinel scan vulnerable_app/")
     print("  sentinel scan vulnerable_app/ --no-ai")
     print(
-        "  sentinel scan vulnerable_app/ "
-        "--format html"
-    )
-    print(
-        "  sentinel scan vulnerable_app/ "
-        "--format json"
+        "  sentinel scan . --no-ai "
+        "--format json --exclude vulnerable_app"
     )
 
 
@@ -140,6 +150,7 @@ def main():
     target = sys.argv[2]
     use_ai = True
     output_format = "all"
+    exclude_paths = []
 
     args = sys.argv[3:]
     index = 0
@@ -171,6 +182,14 @@ def main():
 
             index += 2
 
+        elif argument == "--exclude":
+            if index + 1 >= len(args):
+                print("Error: --exclude requires a path.")
+                sys.exit(1)
+
+            exclude_paths.append(args[index + 1])
+            index += 2
+
         else:
             print(f"Unknown option: {argument}")
             print(
@@ -183,6 +202,7 @@ def main():
         target,
         use_ai=use_ai,
         output_format=output_format,
+        exclude_paths=exclude_paths,
     )
 
     sys.exit(get_exit_code(findings))

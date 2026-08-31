@@ -14,30 +14,49 @@ from scanner.pip_audit_scanner import (
 )
 
 
-def run_security_scan(target):
+def run_security_scan(target, exclude_paths=None):
     findings = []
 
+    exclude_paths = exclude_paths or []
+
     # Bandit
-    bandit_data = run_bandit(target)
+    bandit_data = run_bandit(
+        target,
+        exclude_paths=exclude_paths,
+    )
     findings.extend(normalize_bandit(bandit_data))
 
     # Gitleaks
-    gitleaks_data = run_gitleaks(target)
+    gitleaks_data = run_gitleaks(
+        target,
+        exclude_paths=exclude_paths,
+    )
     findings.extend(normalize_gitleaks(gitleaks_data))
 
     # pip-audit
     pip_audit_data = run_pip_audit(target)
-    findings.extend(normalize_pip_audit(pip_audit_data, target))
+    findings.extend(
+        normalize_pip_audit(
+            pip_audit_data,
+            target,
+        )
+    )
 
     return findings
 
 
 if __name__ == "__main__":
-    findings = run_security_scan("vulnerable_app/")
+    findings = run_security_scan(
+        "vulnerable_app/"
+    )
 
-    print("\n=== Sentinel Agent Security Scan ===\n")
+    print(
+        "\n=== Sentinel Agent Security Scan ===\n"
+    )
 
     for finding in findings:
         print(finding)
 
-    print(f"\nTotal findings: {len(findings)}")
+    print(
+        f"\nTotal findings: {len(findings)}"
+    )

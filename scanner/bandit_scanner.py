@@ -4,17 +4,27 @@ import subprocess
 from scanner.finding import SecurityFinding
 
 
-def run_bandit(target):
+def run_bandit(target, exclude_paths=None):
+    exclude_paths = exclude_paths or []
+
+    command = [
+        "bandit",
+        "-r",
+        target,
+    ]
+
+    if exclude_paths:
+        command.extend(
+            [
+                "--exclude",
+                ",".join(exclude_paths),
+            ]
+        )
+
+    command.extend(["-f", "json"])
+
     result = subprocess.run(
-        [
-            "bandit",
-            "-r",
-            target,
-            "--exclude",
-            ".venv,.git",
-            "-f",
-            "json",
-        ],
+        command,
         capture_output=True,
         text=True,
     )
@@ -29,7 +39,7 @@ def run_bandit(target):
         }
 
     try:
-        data = json.loads(result.stdout)
+        return json.loads(result.stdout)
     except json.JSONDecodeError:
         return {
             "results": [],
@@ -38,8 +48,6 @@ def run_bandit(target):
                 result.stderr.strip(),
             ],
         }
-
-    return data
 
 
 def normalize_findings(data):

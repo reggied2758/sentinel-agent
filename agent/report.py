@@ -2,6 +2,9 @@ import html
 import json
 
 
+VALID_FORMATS = {"all", "json", "markdown", "html"}
+
+
 def get_overall_risk(findings):
     high = sum(1 for f in findings if f.severity == "HIGH")
     medium = sum(1 for f in findings if f.severity == "MEDIUM")
@@ -14,7 +17,7 @@ def get_overall_risk(findings):
         return "LOW"
 
 
-def generate_report(findings, analyses):
+def build_report_data(findings, analyses):
     high = sum(1 for f in findings if f.severity == "HIGH")
     medium = sum(1 for f in findings if f.severity == "MEDIUM")
     low = sum(1 for f in findings if f.severity == "LOW")
@@ -47,59 +50,67 @@ def generate_report(findings, analyses):
                     "explanation": analysis.get("explanation", ""),
                     "impact": analysis.get("impact", ""),
                     "recommendation": analysis.get(
-                        "recommendation", ""
+                        "recommendation",
+                        "",
                     ),
                 },
             }
         )
 
-    # JSON report
+    return report
+
+
+def generate_json_report(report):
     with open("sentinel_report.json", "w") as file:
         json.dump(report, file, indent=2)
 
-    # Markdown report
+
+def generate_markdown_report(report):
+    summary = report["summary"]
+    findings = report["findings"]
+
     with open("sentinel_report.md", "w") as file:
         file.write("# Sentinel Security Report\n\n")
 
         file.write("## Overall Risk\n\n")
-        file.write(f"**{overall_risk}**\n\n")
+        file.write(f"**{summary['overall_risk']}**\n\n")
 
         file.write("## Risk Summary\n\n")
         file.write("| Severity | Count |\n")
         file.write("|---|---:|\n")
-        file.write(f"| HIGH | {high} |\n")
-        file.write(f"| MEDIUM | {medium} |\n")
-        file.write(f"| LOW | {low} |\n")
-        file.write(f"| **TOTAL** | **{len(findings)}** |\n\n")
+        file.write(f"| HIGH | {summary['high']} |\n")
+        file.write(f"| MEDIUM | {summary['medium']} |\n")
+        file.write(f"| LOW | {summary['low']} |\n")
+        file.write(
+            f"| **TOTAL** | **{summary['total']}** |\n\n"
+        )
 
         file.write("## Findings\n\n")
 
-        for index, (finding, analysis) in enumerate(
-            zip(findings, analyses),
-            start=1,
-        ):
+        for index, finding in enumerate(findings, start=1):
+            analysis = finding["ai_analysis"]
+
             file.write(
-                f"### {index}. [{finding.severity}] "
-                f"{finding.tool} - {finding.rule}\n\n"
+                f"### {index}. [{finding['severity']}] "
+                f"{finding['tool']} - {finding['rule']}\n\n"
             )
 
             file.write(
                 f"**Location:** "
-                f"`{finding.file}:{finding.line}`\n\n"
+                f"`{finding['file']}:{finding['line']}`\n\n"
             )
 
             file.write(
-                f"**Message:** {finding.message}\n\n"
+                f"**Message:** {finding['message']}\n\n"
             )
 
-            if finding.cwe:
+            if finding["cwe"]:
                 file.write(
-                    f"**CWE:** {finding.cwe}\n\n"
+                    f"**CWE:** {finding['cwe']}\n\n"
                 )
 
             file.write(
-                f"**Risk:** "
-                f"{analysis.get('risk', '')}\n\n"
+                f"**Risk:** {analysis.get('risk', '')}\n\n"
             )
 
             file.write(
@@ -119,7 +130,20 @@ def generate_report(findings, analyses):
 
             file.write("---\n\n")
 
-    # HTML report
+
+def generate_html_report(report):
+    summary = report["summary"]
+    findings = report["findings"]
+
+    overall_risk = html.escape(
+        str(summary["overall_risk"])
+    )
+
+    high = summary["high"]
+    medium = summary["medium"]
+    low = summary["low"]
+    total = summary["total"]
+
     with open("sentinel_report.html", "w") as file:
         file.write(
             """<!DOCTYPE html>
@@ -298,7 +322,7 @@ footer {
 <section class="risk">
     <div class="risk-label">Overall Risk</div>
     <div class="risk-value">
-        {html.escape(overall_risk)}
+        {overall_risk}
     </div>
 </section>
 
@@ -320,7 +344,7 @@ footer {
 
     <div class="card">
         <div class="card-label">Total</div>
-        <div class="card-value">{len(findings)}</div>
+        <div class="card-value">{total}</div>
     </div>
 </section>
 
@@ -337,11 +361,26 @@ footer {
 """
             )
 
-        for index, (finding, analysis) in enumerate(
-            zip(findings, analyses),
-            start=1,
-        ):
-            severity_class = finding.severity.lower()
+        for index, finding in enumerate(findings, start=1):
+            analysis = finding["ai_analysis"]
+
+            severity = html.escape(
+                str(finding["severity"])
+            )
+
+            severity_class = (
+                str(finding["severity"]).lower()
+            )
+
+            tool = html.escape(str(finding["tool"]))
+            rule = html.escape(str(finding["rule"]))
+            finding_file = html.escape(
+                str(finding["file"])
+            )
+            line = html.escape(str(finding["line"]))
+            message = html.escape(
+                str(finding["message"])
+            )
 
             file.write(
                 f"""
@@ -349,17 +388,15 @@ footer {
 
 <div class="finding-header">
     <span class="severity {severity_class}">
-        [{html.escape(finding.severity)}]
+        [{severity}]
     </span>
 
     <strong>
-        {html.escape(finding.tool)}
-        - {html.escape(finding.rule)}
+        {tool} - {rule}
     </strong>
 
     <div class="meta">
-        {html.escape(str(finding.file))}
-        :{html.escape(str(finding.line))}
+        {finding_file}:{line}
     </div>
 </div>
 
@@ -367,17 +404,17 @@ footer {
 
 <div class="section">
     <strong>Message</strong>
-    {html.escape(str(finding.message))}
+    {message}
 </div>
 """
             )
 
-            if finding.cwe:
+            if finding["cwe"]:
                 file.write(
                     f"""
 <div class="section">
     <strong>CWE</strong>
-    {html.escape(str(finding.cwe))}
+    {html.escape(str(finding["cwe"]))}
 </div>
 """
                 )
@@ -386,9 +423,7 @@ footer {
                 f"""
 <div class="section">
     <strong>Risk</strong>
-    {html.escape(
-        str(analysis.get("risk", ""))
-    )}
+    {html.escape(str(analysis.get("risk", "")))}
 </div>
 
 <div class="section">
@@ -429,20 +464,51 @@ footer {
 """
         )
 
+
+def generate_report(
+    findings,
+    analyses,
+    output_format="all",
+):
+    if output_format not in VALID_FORMATS:
+        raise ValueError(
+            f"Unsupported output format: {output_format}"
+        )
+
+    report = build_report_data(
+        findings,
+        analyses,
+    )
+
+    if output_format in ("all", "json"):
+        generate_json_report(report)
+
+    if output_format in ("all", "markdown"):
+        generate_markdown_report(report)
+
+    if output_format in ("all", "html"):
+        generate_html_report(report)
+
     print("\n=== SENTINEL SECURITY REPORT ===\n")
 
     print("Overall Risk")
     print("------------")
-    print(overall_risk)
+    print(report["summary"]["overall_risk"])
 
     print("\nRisk Summary")
     print("------------")
-    print(f"HIGH     {high}")
-    print(f"MEDIUM   {medium}")
-    print(f"LOW      {low}")
-    print(f"TOTAL    {len(findings)}")
+    print(f"HIGH     {report['summary']['high']}")
+    print(f"MEDIUM   {report['summary']['medium']}")
+    print(f"LOW      {report['summary']['low']}")
+    print(f"TOTAL    {report['summary']['total']}")
 
     print("\nReports saved:")
-    print("- sentinel_report.json")
-    print("- sentinel_report.md")
-    print("- sentinel_report.html")
+
+    if output_format in ("all", "json"):
+        print("- sentinel_report.json")
+
+    if output_format in ("all", "markdown"):
+        print("- sentinel_report.md")
+
+    if output_format in ("all", "html"):
+        print("- sentinel_report.html")

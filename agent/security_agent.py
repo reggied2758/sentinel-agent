@@ -11,6 +11,23 @@ VALID_FORMATS = {"json", "markdown", "html", "all"}
 BLOCKING_SEVERITIES = {"HIGH", "CRITICAL"}
 
 
+def build_no_ai_analysis(finding):
+    """Build useful analysis without requiring AI."""
+    return {
+        "risk": finding.severity,
+        "explanation": finding.message
+        or "Security finding detected by scanner.",
+        "impact": (
+            f"{finding.tool} reported rule "
+            f"{finding.rule} at {finding.file}:{finding.line}."
+        ),
+        "recommendation": (
+            "Review the finding and remediate the "
+            "underlying security issue."
+        ),
+    }
+
+
 def run_agent(
     target,
     use_ai=True,
@@ -44,21 +61,17 @@ def run_agent(
             f"{finding.rule}"
         )
 
+        print(f"File: {finding.file}")
+        print(f"Line: {finding.line}")
+        print(f"Message: {finding.message}")
+
+        if finding.cwe:
+            print(f"CWE: {finding.cwe}")
+
         if use_ai:
             analysis = analyze_finding(finding)
         else:
-            analysis = {
-                "risk": finding.rule,
-                "explanation": "AI analysis disabled.",
-                "impact": (
-                    "See the scanner finding "
-                    "for technical details."
-                ),
-                "recommendation": (
-                    "Review and remediate the "
-                    "finding manually."
-                ),
-            }
+            analysis = build_no_ai_analysis(finding)
 
         analyses.append(analysis)
 

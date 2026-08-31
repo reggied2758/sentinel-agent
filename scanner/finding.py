@@ -10,3 +10,4 @@ class SecurityFinding:
     line: int
     message: str
     cwe: int | None = None
+    code: str | None = None

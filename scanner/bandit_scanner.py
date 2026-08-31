@@ -64,6 +64,7 @@ def normalize_findings(data):
             line=result.get("line_number", 0),
             message=result.get("issue_text", ""),
             cwe=issue_cwe.get("id"),
+            code=result.get("code"),
         )
 
         findings.append(finding)

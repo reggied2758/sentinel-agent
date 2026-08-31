@@ -1,0 +1,35 @@
+name: Sentinel Security CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test-and-scan:
+    name: Test and Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Sentinel
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest bandit pip-audit
+
+      - name: Run tests
+        run: pytest
+
+      - name: Run Sentinel security scan
+        run: sentinel scan vulnerable_app/ --no-ai --format json

@@ -39,5 +39,55 @@ jobs:
       - name: Run tests
         run: pytest
 
+      - name: Run Bandit directly
+        run: |
+          bandit \
+            -r . \
+            --exclude ./.venv,./.git,./vulnerable_app \
+            -f json \
+            -o bandit-report.json || true
+
+          python - <<'PY'
+          import json
+
+          with open("bandit-report.json") as f:
+              data = json.load(f)
+
+          print("=== Bandit findings ===")
+
+          for finding in data.get("results", []):
+              print(
+                  f"{finding.get('issue_severity')} "
+                  f"{finding.get('test_id')} "
+                  f"{finding.get('filename')}:"
+                  f"{finding.get('line_number')} - "
+                  f"{finding.get('issue_text')}"
+              )
+          PY
+
+      - name: Run Gitleaks directly
+        run: |
+          gitleaks detect \
+            --source . \
+            --no-git \
+            --report-format json \
+            --report-path gitleaks-report.json || true
+
+          if [ -s gitleaks-report.json ]; then
+            cat gitleaks-report.json
+          else
+            echo "No Gitleaks findings."
+          fi
+
+      - name: Run pip-audit directly
+        run: |
+          if [ -f requirements.txt ]; then
+            pip-audit -r requirements.txt -f json || true
+          elif [ -f vulnerable_app/requirements.txt ]; then
+            pip-audit -r vulnerable_app/requirements.txt -f json || true
+          else
+            echo "No requirements.txt found."
+          fi
+
       - name: Run Sentinel security scan
         run: sentinel scan . --no-ai --format json --exclude vulnerable_app

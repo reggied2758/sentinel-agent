@@ -45,6 +45,7 @@ def build_report_data(findings, analyses):
                 "line": finding.line,
                 "message": finding.message,
                 "cwe": finding.cwe,
+                "code": finding.code,
                 "ai_analysis": {
                     "risk": analysis.get("risk", ""),
                     "explanation": analysis.get("explanation", ""),
@@ -103,6 +104,14 @@ def generate_markdown_report(report):
             file.write(
                 f"**Message:** {finding['message']}\n\n"
             )
+
+            if finding.get("code"):
+                file.write(
+                    "**Code:**\n\n"
+                    "```python\n"
+                    f"{finding['code']}\n"
+                    "```\n\n"
+                )
 
             if finding["cwe"]:
                 file.write(
@@ -288,6 +297,22 @@ code {
     border-radius: 4px;
 }
 
+pre {
+    background: #111827;
+    color: white;
+    padding: 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    margin: 8px 0 0;
+}
+
+pre code {
+    background: transparent;
+    padding: 0;
+    color: inherit;
+}
+
 .empty {
     background: white;
     padding: 32px;
@@ -381,6 +406,9 @@ footer {
             message = html.escape(
                 str(finding["message"])
             )
+            code = html.escape(
+                str(finding.get("code") or "")
+            )
 
             file.write(
                 f"""
@@ -408,6 +436,16 @@ footer {
 </div>
 """
             )
+
+            if code:
+                file.write(
+                    f"""
+<div class="section">
+    <strong>Code</strong>
+    <pre><code>{code}</code></pre>
+</div>
+"""
+                )
 
             if finding["cwe"]:
                 file.write(

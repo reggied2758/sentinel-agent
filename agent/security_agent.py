@@ -5,6 +5,7 @@ from scanner.__main__ import run_security_scan
 from agent.prioritizer import prioritize
 from agent.ai_analyzer import analyze_finding
 from agent.remediation import generate_remediation
+from agent.patch_validator import validate_patch
 from agent.report import generate_report
 
 
@@ -152,8 +153,26 @@ def run_agent(
                 "summary": "",
                 "explanation": "",
                 "fixed_code": "",
+                "patch": "",
                 "changes": [],
                 "testing": "",
+            }
+
+        if remediation.get("patch"):
+            validation = validate_patch(
+                remediation["patch"],
+                target,
+            )
+
+            remediation["patch_validation"] = (
+                validation
+            )
+        else:
+            remediation["patch_validation"] = {
+                "valid": False,
+                "errors": [
+                    "No patch was generated."
+                ],
             }
 
         remediations.append(
@@ -183,6 +202,14 @@ def run_agent(
                     remediation["fixed_code"]
                 )
 
+            if remediation.get("patch"):
+                print(
+                    "Proposed Patch:"
+                )
+                print(
+                    remediation["patch"]
+                )
+
             if remediation["changes"]:
                 print(
                     "Changes:"
@@ -199,6 +226,30 @@ def run_agent(
                 f"Testing: "
                 f"{remediation['testing']}"
             )
+
+            validation = remediation[
+                "patch_validation"
+            ]
+
+            print(
+                "\nPatch Validation:"
+            )
+
+            if validation["valid"]:
+                print(
+                    "Status: VALID"
+                )
+            else:
+                print(
+                    "Status: INVALID"
+                )
+
+                for error in validation[
+                    "errors"
+                ]:
+                    print(
+                        f"- {error}"
+                    )
 
     generate_report(
         findings,
@@ -218,14 +269,11 @@ run_agent.last_errors = []
 def get_exit_code(findings):
     """
     Return a non-zero exit code when HIGH
-    or CRITICAL security findings are present.
+    or CRITICAL findings are present.
     """
 
     for finding in findings:
-        if (
-            finding.severity
-            in BLOCKING_SEVERITIES
-        ):
+        if finding.severity in BLOCKING_SEVERITIES:
             return 1
 
     return 0
@@ -233,195 +281,121 @@ def get_exit_code(findings):
 
 def print_help():
     print(
-        "Sentinel Security Agent"
-    )
+        """
+Sentinel Security Agent
 
-    print()
+Usage:
+    sentinel scan <target> [options]
 
-    print("Usage:")
+Options:
+    --no-ai
+        Disable AI analysis and remediation.
 
-    print(
-        "  sentinel scan <target>"
-    )
+    --format <format>
+        Report format:
+        json
+        markdown
+        html
+        all
 
-    print(
-        "  sentinel scan <target> --no-ai"
-    )
+    --exclude <path>
+        Exclude a path from scanning.
 
-    print(
-        "  sentinel scan <target> "
-        "--format <format>"
-    )
-
-    print(
-        "  sentinel scan <target> "
-        "--exclude <path>"
-    )
-
-    print()
-
-    print("Commands:")
-
-    print(
-        "  scan    Scan a project for "
-        "security vulnerabilities"
-    )
-
-    print()
-
-    print("Options:")
-
-    print(
-        "  --no-ai             Run scanners "
-        "without AI analysis"
-    )
-
-    print(
-        "  --format <format>   Output format: "
-        "json, markdown, html, all"
-    )
-
-    print(
-        "  --exclude <path>    Exclude a path "
-        "from scanning"
-    )
-
-    print()
-
-    print("Security gate:")
-
-    print(
-        "  HIGH and CRITICAL findings cause "
-        "a non-zero exit."
-    )
-
-    print(
-        "  Scanner errors also cause a "
-        "non-zero exit."
-    )
-
-    print()
-
-    print("Examples:")
-
-    print(
-        "  sentinel scan vulnerable_app/"
-    )
-
-    print(
-        "  sentinel scan vulnerable_app/ "
-        "--no-ai"
-    )
-
-    print(
-        "  sentinel scan . --no-ai "
-        "--format json "
-        "--exclude vulnerable_app"
+    --help
+        Show this help message.
+"""
     )
 
 
 def main():
+    args = sys.argv[1:]
 
-    if len(sys.argv) == 2 and sys.argv[1] in (
+    if not args:
+        print_help()
+        sys.exit(0)
+
+    if args[0] in {
         "--help",
         "-h",
-    ):
+        "help",
+    }:
         print_help()
-        return
+        sys.exit(0)
 
-    if (
-        len(sys.argv) < 3
-        or sys.argv[1] != "scan"
-    ):
+    if args[0] != "scan":
         print(
-            "Usage: sentinel scan "
-            "<target> [options]"
+            f"Unknown command: {args[0]}"
         )
+        print_help()
+        sys.exit(2)
 
+    if len(args) < 2:
         print(
-            "Run 'sentinel --help' "
-            "for more information."
+            "Error: scan requires a target directory."
         )
+        print_help()
+        sys.exit(2)
 
-        sys.exit(1)
-
-    target = sys.argv[2]
+    target = args[1]
 
     use_ai = True
     output_format = "all"
     exclude_paths = []
 
-    args = sys.argv[3:]
-    index = 0
+    index = 2
 
     while index < len(args):
-
         argument = args[index]
 
         if argument == "--no-ai":
             use_ai = False
             index += 1
+            continue
 
-        elif argument == "--format":
-
+        if argument == "--format":
             if index + 1 >= len(args):
                 print(
-                    "Error: --format "
-                    "requires a value."
+                    "Error: --format requires a value."
                 )
-                sys.exit(1)
+                sys.exit(2)
 
-            output_format = (
-                args[index + 1]
-            )
+            output_format = args[index + 1]
 
-            if (
-                output_format
-                not in VALID_FORMATS
-            ):
+            if output_format not in VALID_FORMATS:
                 print(
-                    "Error: unsupported "
-                    f"format: "
-                    f"{output_format}"
+                    f"Error: invalid format "
+                    f"'{output_format}'."
                 )
-
                 print(
                     "Valid formats: "
-                    "json, markdown, html, all"
+                    + ", ".join(
+                        sorted(VALID_FORMATS)
+                    )
                 )
-
-                sys.exit(1)
+                sys.exit(2)
 
             index += 2
+            continue
 
-        elif argument == "--exclude":
-
+        if argument == "--exclude":
             if index + 1 >= len(args):
                 print(
-                    "Error: --exclude "
-                    "requires a path."
+                    "Error: --exclude requires a path."
                 )
-                sys.exit(1)
+                sys.exit(2)
 
             exclude_paths.append(
                 args[index + 1]
             )
 
             index += 2
+            continue
 
-        else:
-
-            print(
-                f"Unknown option: "
-                f"{argument}"
-            )
-
-            print(
-                "Run 'sentinel --help' "
-                "for more information."
-            )
-
-            sys.exit(1)
+        print(
+            f"Unknown option: {argument}"
+        )
+        print_help()
+        sys.exit(2)
 
     findings = run_agent(
         target,
@@ -430,7 +404,13 @@ def main():
         exclude_paths=exclude_paths,
     )
 
-    if run_agent.last_errors:
+    scanner_errors = getattr(
+        run_agent,
+        "last_errors",
+        [],
+    )
+
+    if scanner_errors:
         sys.exit(1)
 
     sys.exit(

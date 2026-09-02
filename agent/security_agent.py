@@ -4,6 +4,7 @@ from pathlib import Path
 from scanner.__main__ import run_security_scan
 from agent.prioritizer import prioritize
 from agent.ai_analyzer import analyze_finding
+from agent.remediation import generate_remediation
 from agent.report import generate_report
 
 
@@ -70,6 +71,7 @@ def run_agent(
         print()
 
     analyses = []
+    remediations = []
 
     for finding in findings:
         print(
@@ -137,17 +139,74 @@ def run_agent(
             f"{analysis['recommendation']}"
         )
 
+        if (
+            use_ai
+            and finding.severity
+            in BLOCKING_SEVERITIES
+        ):
+            remediation = generate_remediation(
+                finding
+            )
+        else:
+            remediation = {
+                "summary": "",
+                "explanation": "",
+                "fixed_code": "",
+                "changes": [],
+                "testing": "",
+            }
+
+        remediations.append(
+            remediation
+        )
+
+        if remediation["summary"]:
+            print(
+                "\nRemediation:"
+            )
+
+            print(
+                f"Summary: "
+                f"{remediation['summary']}"
+            )
+
+            print(
+                f"Explanation: "
+                f"{remediation['explanation']}"
+            )
+
+            if remediation["fixed_code"]:
+                print(
+                    "Proposed Code:"
+                )
+                print(
+                    remediation["fixed_code"]
+                )
+
+            if remediation["changes"]:
+                print(
+                    "Changes:"
+                )
+
+                for change in remediation[
+                    "changes"
+                ]:
+                    print(
+                        f"- {change}"
+                    )
+
+            print(
+                f"Testing: "
+                f"{remediation['testing']}"
+            )
+
     generate_report(
         findings,
         analyses,
+        remediations=remediations,
         output_format=output_format,
     )
 
-    # Preserve the existing run_agent() API:
-    # callers receive the findings list.
-    #
-    # Scanner errors are attached separately so
-    # main() can determine the correct CI exit code.
     run_agent.last_errors = scanner_errors
 
     return findings
@@ -262,6 +321,7 @@ def print_help():
 
 
 def main():
+
     if len(sys.argv) == 2 and sys.argv[1] in (
         "--help",
         "-h",
@@ -295,6 +355,7 @@ def main():
     index = 0
 
     while index < len(args):
+
         argument = args[index]
 
         if argument == "--no-ai":
@@ -302,6 +363,7 @@ def main():
             index += 1
 
         elif argument == "--format":
+
             if index + 1 >= len(args):
                 print(
                     "Error: --format "
@@ -333,6 +395,7 @@ def main():
             index += 2
 
         elif argument == "--exclude":
+
             if index + 1 >= len(args):
                 print(
                     "Error: --exclude "
@@ -347,6 +410,7 @@ def main():
             index += 2
 
         else:
+
             print(
                 f"Unknown option: "
                 f"{argument}"
@@ -366,9 +430,6 @@ def main():
         exclude_paths=exclude_paths,
     )
 
-    # Scanner errors are failures because a clean
-    # security result cannot be trusted if a scanner
-    # failed to run.
     if run_agent.last_errors:
         sys.exit(1)
 

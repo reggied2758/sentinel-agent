@@ -2,27 +2,65 @@ import html
 import json
 
 
-VALID_FORMATS = {"all", "json", "markdown", "html"}
+VALID_FORMATS = {
+    "all",
+    "json",
+    "markdown",
+    "html",
+}
 
 
 def get_overall_risk(findings):
-    high = sum(1 for f in findings if f.severity == "HIGH")
-    medium = sum(1 for f in findings if f.severity == "MEDIUM")
+    high = sum(
+        1
+        for finding in findings
+        if finding.severity == "HIGH"
+    )
+
+    medium = sum(
+        1
+        for finding in findings
+        if finding.severity == "MEDIUM"
+    )
 
     if high >= 1:
         return "CRITICAL"
+
     elif medium >= 1:
         return "HIGH"
+
     else:
         return "LOW"
 
 
-def build_report_data(findings, analyses):
-    high = sum(1 for f in findings if f.severity == "HIGH")
-    medium = sum(1 for f in findings if f.severity == "MEDIUM")
-    low = sum(1 for f in findings if f.severity == "LOW")
+def build_report_data(
+    findings,
+    analyses,
+    remediations=None,
+):
+    remediations = remediations or []
 
-    overall_risk = get_overall_risk(findings)
+    high = sum(
+        1
+        for finding in findings
+        if finding.severity == "HIGH"
+    )
+
+    medium = sum(
+        1
+        for finding in findings
+        if finding.severity == "MEDIUM"
+    )
+
+    low = sum(
+        1
+        for finding in findings
+        if finding.severity == "LOW"
+    )
+
+    overall_risk = get_overall_risk(
+        findings
+    )
 
     report = {
         "summary": {
@@ -35,7 +73,12 @@ def build_report_data(findings, analyses):
         "findings": [],
     }
 
-    for finding, analysis in zip(findings, analyses):
+    for index, (
+        finding,
+        analysis,
+    ) in enumerate(
+        zip(findings, analyses)
+    ):
         report["findings"].append(
             {
                 "id": finding.finding_id,
@@ -48,14 +91,28 @@ def build_report_data(findings, analyses):
                 "cwe": finding.cwe,
                 "code": finding.code,
                 "ai_analysis": {
-                    "risk": analysis.get("risk", ""),
-                    "explanation": analysis.get("explanation", ""),
-                    "impact": analysis.get("impact", ""),
+                    "risk": analysis.get(
+                        "risk",
+                        "",
+                    ),
+                    "explanation": analysis.get(
+                        "explanation",
+                        "",
+                    ),
+                    "impact": analysis.get(
+                        "impact",
+                        "",
+                    ),
                     "recommendation": analysis.get(
                         "recommendation",
                         "",
                     ),
                 },
+                "remediation": (
+                    remediations[index]
+                    if index < len(remediations)
+                    else {}
+                ),
             }
         )
 
@@ -63,51 +120,107 @@ def build_report_data(findings, analyses):
 
 
 def generate_json_report(report):
-    with open("sentinel_report.json", "w") as file:
-        json.dump(report, file, indent=2)
+    with open(
+        "sentinel_report.json",
+        "w",
+    ) as file:
+        json.dump(
+            report,
+            file,
+            indent=2,
+        )
 
 
 def generate_markdown_report(report):
     summary = report["summary"]
     findings = report["findings"]
 
-    with open("sentinel_report.md", "w") as file:
-        file.write("# Sentinel Security Report\n\n")
-
-        file.write("## Overall Risk\n\n")
-        file.write(f"**{summary['overall_risk']}**\n\n")
-
-        file.write("## Risk Summary\n\n")
-        file.write("| Severity | Count |\n")
-        file.write("|---|---:|\n")
-        file.write(f"| HIGH | {summary['high']} |\n")
-        file.write(f"| MEDIUM | {summary['medium']} |\n")
-        file.write(f"| LOW | {summary['low']} |\n")
+    with open(
+        "sentinel_report.md",
+        "w",
+    ) as file:
         file.write(
-            f"| **TOTAL** | **{summary['total']}** |\n\n"
+            "# Sentinel Security Report\n\n"
         )
 
-        file.write("## Findings\n\n")
+        file.write(
+            "## Overall Risk\n\n"
+        )
 
-        for index, finding in enumerate(findings, start=1):
-            analysis = finding["ai_analysis"]
+        file.write(
+            f"**{summary['overall_risk']}**\n\n"
+        )
 
-            file.write(
-                f"### {index}. [{finding['severity']}] "
-                f"{finding['tool']} - {finding['rule']}\n\n"
+        file.write(
+            "## Risk Summary\n\n"
+        )
+
+        file.write(
+            "| Severity | Count |\n"
+        )
+
+        file.write(
+            "|---|---:|\n"
+        )
+
+        file.write(
+            f"| HIGH | "
+            f"{summary['high']} |\n"
+        )
+
+        file.write(
+            f"| MEDIUM | "
+            f"{summary['medium']} |\n"
+        )
+
+        file.write(
+            f"| LOW | "
+            f"{summary['low']} |\n"
+        )
+
+        file.write(
+            f"| **TOTAL** | "
+            f"**{summary['total']}** |\n\n"
+        )
+
+        file.write(
+            "## Findings\n\n"
+        )
+
+        for index, finding in enumerate(
+            findings,
+            start=1,
+        ):
+            analysis = finding[
+                "ai_analysis"
+            ]
+
+            remediation = finding.get(
+                "remediation",
+                {},
             )
 
             file.write(
-                f"**Finding ID:** `{finding['id']}`\n\n"
+                f"### {index}. "
+                f"[{finding['severity']}] "
+                f"{finding['tool']} - "
+                f"{finding['rule']}\n\n"
+            )
+
+            file.write(
+                f"**Finding ID:** "
+                f"`{finding['id']}`\n\n"
             )
 
             file.write(
                 f"**Location:** "
-                f"`{finding['file']}:{finding['line']}`\n\n"
+                f"`{finding['file']}:"
+                f"{finding['line']}`\n\n"
             )
 
             file.write(
-                f"**Message:** {finding['message']}\n\n"
+                f"**Message:** "
+                f"{finding['message']}\n\n"
             )
 
             if finding.get("code"):
@@ -120,29 +233,97 @@ def generate_markdown_report(report):
 
             if finding["cwe"]:
                 file.write(
-                    f"**CWE:** {finding['cwe']}\n\n"
+                    f"**CWE:** "
+                    f"{finding['cwe']}\n\n"
                 )
 
             file.write(
-                f"**Risk:** {analysis.get('risk', '')}\n\n"
+                f"**Risk:** "
+                f"{analysis.get('risk', '')}\n\n"
             )
 
             file.write(
                 f"**Explanation:** "
-                f"{analysis.get('explanation', '')}\n\n"
+                f"{analysis.get('explanation', '')}"
+                "\n\n"
             )
 
             file.write(
                 f"**Impact:** "
-                f"{analysis.get('impact', '')}\n\n"
+                f"{analysis.get('impact', '')}"
+                "\n\n"
             )
 
             file.write(
                 f"**Recommendation:** "
-                f"{analysis.get('recommendation', '')}\n\n"
+                f"{analysis.get('recommendation', '')}"
+                "\n\n"
             )
 
-            file.write("---\n\n")
+            if remediation.get("summary"):
+                file.write(
+                    "## Proposed Remediation\n\n"
+                )
+
+                file.write(
+                    f"**Summary:** "
+                    f"{remediation.get('summary', '')}"
+                    "\n\n"
+                )
+
+                file.write(
+                    f"**Explanation:** "
+                    f"{remediation.get('explanation', '')}"
+                    "\n\n"
+                )
+
+                if remediation.get(
+                    "fixed_code"
+                ):
+                    file.write(
+                        "**Proposed Code:**\n\n"
+                        "```python\n"
+                        f"{remediation['fixed_code']}\n"
+                        "```\n\n"
+                    )
+
+                if remediation.get("patch"):
+                    file.write(
+                        "**Proposed Patch:**\n\n"
+                        "```diff\n"
+                        f"{remediation['patch']}\n"
+                        "```\n\n"
+                    )
+
+                changes = remediation.get(
+                    "changes",
+                    [],
+                )
+
+                if changes:
+                    file.write(
+                        "**Changes:**\n\n"
+                    )
+
+                    for change in changes:
+                        file.write(
+                            f"- {change}\n"
+                        )
+
+                    file.write("\n")
+
+                if remediation.get(
+                    "testing"
+                ):
+                    file.write(
+                        f"**Testing:** "
+                        f"{remediation['testing']}"
+                        "\n\n"
+                    )
+
+            file.write(
+                "---\n\n"
+            )
 
 
 def generate_html_report(report):
@@ -158,7 +339,10 @@ def generate_html_report(report):
     low = summary["low"]
     total = summary["total"]
 
-    with open("sentinel_report.html", "w") as file:
+    with open(
+        "sentinel_report.html",
+        "w",
+    ) as file:
         file.write(
             """<!DOCTYPE html>
 <html lang="en">
@@ -301,6 +485,36 @@ h1 {
     margin-bottom: 5px;
 }
 
+.remediation {
+    margin-top: 24px;
+    padding: 20px;
+    border-radius: 10px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+}
+
+.remediation-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 16px;
+}
+
+.remediation-label {
+    font-weight: 700;
+    margin-top: 14px;
+    margin-bottom: 5px;
+}
+
+.patch {
+    background: #111827;
+    color: white;
+    padding: 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    margin-top: 8px;
+}
+
 code {
     background: #f3f4f6;
     padding: 2px 5px;
@@ -396,32 +610,58 @@ footer {
 """
             )
 
-        for index, finding in enumerate(findings, start=1):
-            analysis = finding["ai_analysis"]
+        for index, finding in enumerate(
+            findings,
+            start=1,
+        ):
+            analysis = finding[
+                "ai_analysis"
+            ]
+
+            remediation = finding.get(
+                "remediation",
+                {},
+            )
 
             severity = html.escape(
                 str(finding["severity"])
             )
 
             severity_class = (
-                str(finding["severity"]).lower()
+                str(
+                    finding["severity"]
+                ).lower()
             )
 
             finding_id = html.escape(
                 str(finding["id"])
             )
 
-            tool = html.escape(str(finding["tool"]))
-            rule = html.escape(str(finding["rule"]))
+            tool = html.escape(
+                str(finding["tool"])
+            )
+
+            rule = html.escape(
+                str(finding["rule"])
+            )
+
             finding_file = html.escape(
                 str(finding["file"])
             )
-            line = html.escape(str(finding["line"]))
+
+            line = html.escape(
+                str(finding["line"])
+            )
+
             message = html.escape(
                 str(finding["message"])
             )
+
             code = html.escape(
-                str(finding.get("code") or "")
+                str(
+                    finding.get("code")
+                    or ""
+                )
             )
 
             file.write(
@@ -470,7 +710,9 @@ footer {
                     f"""
 <div class="section">
     <strong>CWE</strong>
-    {html.escape(str(finding["cwe"]))}
+    {html.escape(
+        str(finding["cwe"])
+    )}
 </div>
 """
                 )
@@ -479,30 +721,203 @@ footer {
                 f"""
 <div class="section">
     <strong>Risk</strong>
-    {html.escape(str(analysis.get("risk", "")))}
+    {html.escape(
+        str(
+            analysis.get(
+                "risk",
+                "",
+            )
+        )
+    )}
 </div>
 
 <div class="section">
     <strong>Explanation</strong>
     {html.escape(
-        str(analysis.get("explanation", ""))
+        str(
+            analysis.get(
+                "explanation",
+                "",
+            )
+        )
     )}
 </div>
 
 <div class="section">
     <strong>Impact</strong>
     {html.escape(
-        str(analysis.get("impact", ""))
+        str(
+            analysis.get(
+                "impact",
+                "",
+            )
+        )
     )}
 </div>
 
 <div class="section">
     <strong>Recommendation</strong>
     {html.escape(
-        str(analysis.get("recommendation", ""))
+        str(
+            analysis.get(
+                "recommendation",
+                "",
+            )
+        )
     )}
 </div>
+"""
+            )
 
+            if remediation.get(
+                "summary"
+            ):
+                remediation_summary = html.escape(
+                    str(
+                        remediation.get(
+                            "summary",
+                            "",
+                        )
+                    )
+                )
+
+                remediation_explanation = html.escape(
+                    str(
+                        remediation.get(
+                            "explanation",
+                            "",
+                        )
+                    )
+                )
+
+                fixed_code = html.escape(
+                    str(
+                        remediation.get(
+                            "fixed_code",
+                            "",
+                        )
+                    )
+                )
+
+                patch = html.escape(
+                    str(
+                        remediation.get(
+                            "patch",
+                            "",
+                        )
+                    )
+                )
+
+                testing = html.escape(
+                    str(
+                        remediation.get(
+                            "testing",
+                            "",
+                        )
+                    )
+                )
+
+                file.write(
+                    f"""
+<div class="remediation">
+    <div class="remediation-title">
+        Proposed Remediation
+    </div>
+
+    <div class="remediation-label">
+        Summary
+    </div>
+
+    <div>
+        {remediation_summary}
+    </div>
+
+    <div class="remediation-label">
+        Explanation
+    </div>
+
+    <div>
+        {remediation_explanation}
+    </div>
+"""
+                )
+
+                if fixed_code:
+                    file.write(
+                        f"""
+    <div class="remediation-label">
+        Proposed Code
+    </div>
+
+    <pre><code>{fixed_code}</code></pre>
+"""
+                    )
+
+                if patch:
+                    file.write(
+                        f"""
+    <div class="remediation-label">
+        Proposed Patch
+    </div>
+
+    <pre class="patch"><code>{patch}</code></pre>
+"""
+                    )
+
+                changes = remediation.get(
+                    "changes",
+                    [],
+                )
+
+                if changes:
+                    file.write(
+                        """
+    <div class="remediation-label">
+        Changes
+    </div>
+
+    <ul>
+"""
+                    )
+
+                    for change in changes:
+                        file.write(
+                            f"""
+        <li>
+            {html.escape(
+                str(change)
+            )}
+        </li>
+"""
+                        )
+
+                    file.write(
+                        """
+    </ul>
+"""
+                    )
+
+                if testing:
+                    file.write(
+                        f"""
+    <div class="remediation-label">
+        Testing
+    </div>
+
+    <div>
+        {testing}
+    </div>
+"""
+                    )
+
+                file.write(
+                    """
+</div>
+"""
+                )
+
+            file.write(
+                """
 </div>
 </article>
 """
@@ -524,47 +939,115 @@ footer {
 def generate_report(
     findings,
     analyses,
+    remediations=None,
     output_format="all",
 ):
     if output_format not in VALID_FORMATS:
         raise ValueError(
-            f"Unsupported output format: {output_format}"
+            f"Unsupported format: "
+            f"{output_format}"
         )
 
     report = build_report_data(
         findings,
         analyses,
+        remediations=remediations,
     )
 
-    if output_format in ("all", "json"):
-        generate_json_report(report)
+    if output_format in (
+        "all",
+        "json",
+    ):
+        generate_json_report(
+            report
+        )
 
-    if output_format in ("all", "markdown"):
-        generate_markdown_report(report)
+    if output_format in (
+        "all",
+        "markdown",
+    ):
+        generate_markdown_report(
+            report
+        )
 
-    if output_format in ("all", "html"):
-        generate_html_report(report)
+    if output_format in (
+        "all",
+        "html",
+    ):
+        generate_html_report(
+            report
+        )
 
-    print("\n=== SENTINEL SECURITY REPORT ===\n")
+    print(
+        "\n=== SENTINEL SECURITY REPORT ===\n"
+    )
 
-    print("Overall Risk")
-    print("------------")
-    print(report["summary"]["overall_risk"])
+    print(
+        "Overall Risk"
+    )
 
-    print("\nRisk Summary")
-    print("------------")
-    print(f"HIGH     {report['summary']['high']}")
-    print(f"MEDIUM   {report['summary']['medium']}")
-    print(f"LOW      {report['summary']['low']}")
-    print(f"TOTAL    {report['summary']['total']}")
+    print(
+        "------------"
+    )
 
-    print("\nReports saved:")
+    print(
+        report["summary"][
+            "overall_risk"
+        ]
+    )
 
-    if output_format in ("all", "json"):
-        print("- sentinel_report.json")
+    print(
+        "\nRisk Summary"
+    )
 
-    if output_format in ("all", "markdown"):
-        print("- sentinel_report.md")
+    print(
+        "------------"
+    )
 
-    if output_format in ("all", "html"):
-        print("- sentinel_report.html")
+    print(
+        f"HIGH     "
+        f"{report['summary']['high']}"
+    )
+
+    print(
+        f"MEDIUM   "
+        f"{report['summary']['medium']}"
+    )
+
+    print(
+        f"LOW      "
+        f"{report['summary']['low']}"
+    )
+
+    print(
+        f"TOTAL    "
+        f"{report['summary']['total']}"
+    )
+
+    print(
+        "\nReports saved:"
+    )
+
+    if output_format in (
+        "all",
+        "json",
+    ):
+        print(
+            "- sentinel_report.json"
+        )
+
+    if output_format in (
+        "all",
+        "markdown",
+    ):
+        print(
+            "- sentinel_report.md"
+        )
+
+    if output_format in (
+        "all",
+        "html",
+    ):
+        print(
+            "- sentinel_report.html"
+        )

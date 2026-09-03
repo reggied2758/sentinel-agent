@@ -6,7 +6,7 @@ from agent.prioritizer import prioritize
 from agent.ai_analyzer import analyze_finding
 from agent.remediation import generate_remediation
 from agent.patch_validator import validate_patch
-from agent.patch_applier import apply_patch
+from agent.patch_applier import apply_patch, dry_run_patch
 from agent.report import generate_report
 
 
@@ -199,6 +199,7 @@ def run_agent(
                 print(
                     "Proposed Code:"
                 )
+
                 print(
                     remediation["fixed_code"]
                 )
@@ -207,6 +208,7 @@ def run_agent(
                 print(
                     "Proposed Patch:"
                 )
+
                 print(
                     remediation["patch"]
                 )
@@ -284,11 +286,18 @@ def remediate_agent(
     target,
     output_format="all",
     exclude_paths=None,
+    dry_run=False,
 ):
     """
-    Generate validated remediation patches
-    and optionally apply them after explicit
-    user confirmation.
+    Generate validated remediation patches.
+
+    Normal mode:
+        Ask for confirmation, apply approved patches,
+        and rescan the target.
+
+    Dry-run mode:
+        Test whether the patches can be applied without
+        modifying any files.
     """
 
     target_path = Path(target)
@@ -428,6 +437,76 @@ def remediate_agent(
         )
         return 1
 
+    if dry_run:
+        print(
+            "\n=== Dry Run ==="
+        )
+
+        print(
+            "\nTesting whether the proposed "
+            "patches can be applied."
+        )
+
+        print(
+            "No files will be modified.\n"
+        )
+
+        dry_run_failed = False
+
+        for proposal in proposed_patches:
+            finding = proposal["finding"]
+            remediation = proposal["remediation"]
+
+            print(
+                f"Testing patch for "
+                f"{finding.tool} "
+                f"{finding.rule}..."
+            )
+
+            result = dry_run_patch(
+                remediation["patch"],
+                target,
+            )
+
+            if result["valid"]:
+                print(
+                    "Dry-run application check: PASSED"
+                )
+
+                if result.get("output"):
+                    print(
+                        result["output"]
+                    )
+            else:
+                dry_run_failed = True
+
+                print(
+                    "Dry-run application check: FAILED"
+                )
+
+                for error in result[
+                    "errors"
+                ]:
+                    print(
+                        f"- {error}"
+                    )
+
+        print(
+            "\nNo files have been modified."
+        )
+
+        if dry_run_failed:
+            print(
+                "Dry run failed."
+            )
+            return 1
+
+        print(
+            "Dry run completed successfully."
+        )
+
+        return 0
+
     print(
         "\n=== Review Required ==="
     )
@@ -533,8 +612,7 @@ def remediate_agent(
 
     if verification_result["errors"]:
         print(
-            "Verification scan encountered "
-            "errors."
+            "Verification scan encountered errors."
         )
 
         for error in verification_result[
@@ -550,19 +628,17 @@ def remediate_agent(
 
     if remaining_blocking:
         print(
-            "Remediation verification: "
-            "FAILED"
+            "Remediation verification: FAILED"
         )
 
         print(
-            f"Remaining HIGH/CRITICAL findings: "
-            f"{len(remaining_blocking)}"
+            "\nRemaining HIGH or CRITICAL findings:"
         )
 
         for finding in remaining_blocking:
             print(
                 f"- {finding.tool} "
-                f"{finding.rule}: "
+                f"{finding.rule} "
                 f"{finding.file}:"
                 f"{finding.line}"
             )
@@ -570,13 +646,11 @@ def remediate_agent(
         return 1
 
     print(
-        "Remediation verification: "
-        "PASSED"
+        "Remediation verification: PASSED"
     )
 
     print(
-        "No HIGH or CRITICAL findings "
-        "remain."
+        "No HIGH or CRITICAL findings remain."
     )
 
     return 0
@@ -604,6 +678,10 @@ Options:
     --no-ai
         Disable AI analysis and remediation.
 
+    --dry-run
+        Generate and validate remediation patches
+        without modifying any files.
+
     --format <format>
         Report format:
         json
@@ -621,21 +699,17 @@ Options:
 
 
 def main():
-    args = sys.argv[1:]
+    arguments = sys.argv[1:]
 
-    if not args:
+    if not arguments:
         print_help()
-        sys.exit(0)
+        return 1
 
-    if args[0] in {
-        "--help",
-        "-h",
-        "help",
-    }:
+    if "--help" in arguments:
         print_help()
-        sys.exit(0)
+        return 0
 
-    command = args[0]
+    command = arguments[0]
 
     if command not in {
         "scan",
@@ -645,85 +719,85 @@ def main():
             f"Unknown command: {command}"
         )
         print_help()
-        sys.exit(2)
+        return 1
 
-    if len(args) < 2:
+    if len(arguments) < 2:
         print(
-            f"Error: {command} requires "
-            "a target directory."
+            f"Error: {command} requires a target."
         )
         print_help()
-        sys.exit(2)
+        return 1
 
-    target = args[1]
+    target = arguments[1]
 
     use_ai = True
+    dry_run = False
     output_format = "all"
     exclude_paths = []
 
     index = 2
 
-    while index < len(args):
-        argument = args[index]
+    while index < len(arguments):
+        argument = arguments[index]
 
         if argument == "--no-ai":
             use_ai = False
+
+        elif argument == "--dry-run":
+            dry_run = True
+
+        elif argument == "--format":
             index += 1
-            continue
 
-        if argument == "--format":
-            if index + 1 >= len(args):
+            if index >= len(arguments):
                 print(
-                    "Error: --format requires "
-                    "a value."
+                    "Error: --format requires a value."
                 )
-                sys.exit(2)
+                return 1
 
-            output_format = args[
-                index + 1
-            ]
+            output_format = arguments[index]
 
             if output_format not in VALID_FORMATS:
                 print(
-                    f"Error: invalid format "
-                    f"'{output_format}'."
+                    f"Unknown format: "
+                    f"{output_format}"
                 )
-
                 print(
                     "Valid formats: "
-                    + ", ".join(
-                        sorted(VALID_FORMATS)
-                    )
+                    "json, markdown, html, all"
                 )
+                return 1
 
-                sys.exit(2)
+        elif argument == "--exclude":
+            index += 1
 
-            index += 2
-            continue
-
-        if argument == "--exclude":
-            if index + 1 >= len(args):
+            if index >= len(arguments):
                 print(
-                    "Error: --exclude requires "
-                    "a path."
+                    "Error: --exclude requires a path."
                 )
-                sys.exit(2)
+                return 1
 
             exclude_paths.append(
-                args[index + 1]
+                arguments[index]
             )
 
-            index += 2
-            continue
+        else:
+            print(
+                f"Unknown option: {argument}"
+            )
+            print_help()
+            return 1
 
-        print(
-            f"Unknown option: {argument}"
-        )
-
-        print_help()
-        sys.exit(2)
+        index += 1
 
     if command == "scan":
+        if dry_run:
+            print(
+                "Error: --dry-run is only "
+                "available with remediate."
+            )
+            return 1
+
         findings = run_agent(
             target,
             use_ai=use_ai,
@@ -731,35 +805,25 @@ def main():
             exclude_paths=exclude_paths,
         )
 
-        scanner_errors = getattr(
-            run_agent,
-            "last_errors",
-            [],
-        )
-
-        if scanner_errors:
-            sys.exit(1)
-
-        sys.exit(
-            get_exit_code(findings)
-        )
+        return get_exit_code(findings)
 
     if command == "remediate":
         if not use_ai:
             print(
-                "Error: remediate requires "
-                "AI to generate patches."
+                "Error: --no-ai cannot be used "
+                "with remediate."
             )
-            sys.exit(2)
+            return 1
 
-        exit_code = remediate_agent(
+        return remediate_agent(
             target,
             output_format=output_format,
             exclude_paths=exclude_paths,
+            dry_run=dry_run,
         )
 
-        sys.exit(exit_code)
+    return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -60,22 +60,16 @@ def _normalize_patch_paths(patch, target):
     return "\n".join(normalized_lines) + "\n"
 
 
-def apply_patch(patch, target):
+def dry_run_patch(patch, target):
     """
-    Apply a validated unified diff to the target directory.
+    Validate a patch and test whether it can be applied.
 
-    This function:
-
-    - requires a non-empty patch
-    - validates the patch before applying it
-    - normalizes absolute paths safely
-    - performs a dry-run before modifying files
-    - applies only after the dry-run succeeds
-    - keeps execution inside the target directory
+    This function NEVER modifies files.
     """
 
     if not patch or not patch.strip():
         return {
+            "valid": False,
             "applied": False,
             "errors": [
                 "Patch is empty."
@@ -86,6 +80,7 @@ def apply_patch(patch, target):
 
     if not target_path.exists():
         return {
+            "valid": False,
             "applied": False,
             "errors": [
                 f"Target does not exist: {target}"
@@ -94,6 +89,7 @@ def apply_patch(patch, target):
 
     if not target_path.is_dir():
         return {
+            "valid": False,
             "applied": False,
             "errors": [
                 f"Target is not a directory: {target}"
@@ -107,6 +103,7 @@ def apply_patch(patch, target):
 
     if not validation["valid"]:
         return {
+            "valid": False,
             "applied": False,
             "errors": [
                 "Patch validation failed.",
@@ -133,6 +130,7 @@ def apply_patch(patch, target):
         )
     except OSError as error:
         return {
+            "valid": False,
             "applied": False,
             "errors": [
                 f"Unable to run patch command: {error}"
@@ -141,6 +139,7 @@ def apply_patch(patch, target):
 
     if result.returncode != 0:
         return {
+            "valid": False,
             "applied": False,
             "errors": [
                 "Patch dry-run failed.",
@@ -149,6 +148,48 @@ def apply_patch(patch, target):
                 or "Unknown patch error.",
             ],
         }
+
+    return {
+        "valid": True,
+        "applied": False,
+        "errors": [],
+        "output": (
+            result.stdout.strip()
+            or "Patch dry-run completed successfully."
+        ),
+    }
+
+
+def apply_patch(patch, target):
+    """
+    Apply a validated unified diff to the target directory.
+
+    This function:
+
+    - requires a non-empty patch
+    - validates the patch before applying it
+    - normalizes absolute paths safely
+    - performs a dry-run before modifying files
+    - applies only after the dry-run succeeds
+    - keeps execution inside the target directory
+    """
+
+    dry_run_result = dry_run_patch(
+        patch,
+        target,
+    )
+
+    if not dry_run_result["valid"]:
+        return {
+            "applied": False,
+            "errors": dry_run_result["errors"],
+        }
+
+    target_path = Path(target).resolve()
+    normalized_patch = _normalize_patch_paths(
+        patch,
+        target,
+    )
 
     try:
         result = subprocess.run(

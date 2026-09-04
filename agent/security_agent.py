@@ -9,6 +9,7 @@ from agent.patch_validator import validate_patch
 from agent.patch_applier import apply_patch, dry_run_patch
 from agent.report import generate_report
 from agent.audit_log import write_audit_event
+from agent.patch_confidence import evaluate_patch_confidence
 
 
 VALID_FORMATS = {
@@ -311,6 +312,46 @@ def get_exit_code(findings):
     return 0
 
 
+def _evaluate_and_print_confidence(
+    finding,
+    remediation,
+    validation,
+    dry_run_result,
+):
+    """
+    Evaluate a remediation patch using validation
+    and dry-run evidence.
+    """
+
+    confidence = evaluate_patch_confidence(
+        finding=finding,
+        patch=remediation.get("patch", ""),
+        validation=validation,
+        dry_run_result=dry_run_result,
+    )
+
+    remediation["patch_confidence"] = confidence
+
+    print("\n=== Remediation Decision ===")
+    print(
+        f"Confidence: {confidence['confidence']}"
+    )
+    print(
+        f"Recommendation: "
+        f"{confidence['recommendation']}"
+    )
+    print(
+        f"Score: {confidence['score']}"
+    )
+
+    print("Reasons:")
+
+    for reason in confidence["reasons"]:
+        print(f"- {reason}")
+
+    return confidence
+
+
 def remediate_agent(
     target,
     output_format="all",
@@ -576,6 +617,16 @@ def remediate_agent(
             result = dry_run_patch(
                 remediation["patch"],
                 target,
+            )
+
+            confidence = _evaluate_and_print_confidence(
+                finding,
+                remediation,
+                validate_patch(
+                    remediation["patch"],
+                    target,
+                ),
+                result,
             )
 
             if result["valid"]:

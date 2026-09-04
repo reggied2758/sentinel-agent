@@ -145,6 +145,16 @@ Patch requirements:
 6. Do not claim the patch has already been applied.
 7. If a safe patch genuinely cannot be produced from the
    supplied code, return an empty patch and explain why.
+8. The unified diff must be syntactically valid and directly
+   applicable by the standard macOS patch command.
+9. Every "@@" hunk header must be followed immediately by
+   valid context, removed, or added lines.
+10. Do not output an empty hunk.
+11. Prefer a single hunk when the security change is localized.
+12. Do not include multiple hunk headers unless each hunk
+   contains its complete context and changes.
+13. Do not omit unchanged context lines required to make the
+   hunk valid.
 """
 
         return _request_remediation(retry_prompt)

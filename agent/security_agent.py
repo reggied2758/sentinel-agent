@@ -8,6 +8,7 @@ from agent.remediation import generate_remediation
 from agent.patch_validator import validate_patch
 from agent.patch_applier import apply_patch, dry_run_patch
 from agent.report import generate_report
+from agent.audit_log import write_audit_event
 
 
 VALID_FORMATS = {
@@ -21,6 +22,34 @@ BLOCKING_SEVERITIES = {
     "HIGH",
     "CRITICAL",
 }
+
+
+def _write_audit(
+    event,
+    target,
+    finding=None,
+    remediation=None,
+    status=None,
+    details=None,
+):
+    """
+    Write an audit event without allowing logging failures
+    to interrupt the security workflow.
+    """
+
+    try:
+        write_audit_event(
+            event=event,
+            target=target,
+            finding=finding,
+            remediation=remediation,
+            status=status,
+            details=details,
+        )
+    except Exception as error:
+        print(
+            f"Warning: unable to write audit event: {error}"
+        )
 
 
 def run_agent(
@@ -298,6 +327,9 @@ def remediate_agent(
     Dry-run mode:
         Test whether the patches can be applied without
         modifying any files.
+
+    All remediation activity is recorded in the
+    Sentinel audit log.
     """
 
     target_path = Path(target)
@@ -313,6 +345,15 @@ def remediate_agent(
             f"Error: target is not a directory: {target}"
         )
         return 1
+
+    _write_audit(
+        "remediation_started",
+        target,
+        status="started",
+        details={
+            "dry_run": dry_run,
+        },
+    )
 
     scan_result = run_security_scan(
         target,
@@ -337,6 +378,16 @@ def remediate_agent(
                 f"{error['message']}"
             )
 
+        _write_audit(
+            "remediation_failed",
+            target,
+            status="failed",
+            details={
+                "reason": "scanner_errors",
+                "errors": scanner_errors,
+            },
+        )
+
         return 1
 
     blocking_findings = [
@@ -350,6 +401,16 @@ def remediate_agent(
             "\nNo HIGH or CRITICAL findings "
             "require remediation."
         )
+
+        _write_audit(
+            "remediation_not_required",
+            target,
+            status="complete",
+            details={
+                "reason": "no_blocking_findings",
+            },
+        )
+
         return 0
 
     print(
@@ -390,7 +451,27 @@ def remediate_agent(
             print(
                 "\nNo patch was generated."
             )
+
+            _write_audit(
+                "patch_generation_failed",
+                target,
+                finding=finding,
+                remediation=remediation,
+                status="failed",
+                details={
+                    "reason": "no_patch_generated",
+                },
+            )
+
             continue
+
+        _write_audit(
+            "patch_generated",
+            target,
+            finding=finding,
+            remediation=remediation,
+            status="generated",
+        )
 
         validation = validate_patch(
             patch,
@@ -409,7 +490,26 @@ def remediate_agent(
                     f"- {error}"
                 )
 
+            _write_audit(
+                "patch_validation_failed",
+                target,
+                finding=finding,
+                remediation=remediation,
+                status="failed",
+                details={
+                    "errors": validation["errors"],
+                },
+            )
+
             continue
+
+        _write_audit(
+            "patch_validated",
+            target,
+            finding=finding,
+            remediation=remediation,
+            status="valid",
+        )
 
         print(
             "\nPatch Validation: VALID"
@@ -435,6 +535,16 @@ def remediate_agent(
             "\nNo valid remediation patches "
             "are available."
         )
+
+        _write_audit(
+            "remediation_failed",
+            target,
+            status="failed",
+            details={
+                "reason": "no_valid_patches",
+            },
+        )
+
         return 1
 
     if dry_run:
@@ -473,10 +583,25 @@ def remediate_agent(
                     "Dry-run application check: PASSED"
                 )
 
+                _write_audit(
+                    "dry_run_passed",
+                    target,
+                    finding=finding,
+                    remediation=remediation,
+                    status="passed",
+                    details={
+                        "output": result.get(
+                            "output",
+                            "",
+                        ),
+                    },
+                )
+
                 if result.get("output"):
                     print(
                         result["output"]
                     )
+
             else:
                 dry_run_failed = True
 
@@ -491,6 +616,17 @@ def remediate_agent(
                         f"- {error}"
                     )
 
+                _write_audit(
+                    "dry_run_failed",
+                    target,
+                    finding=finding,
+                    remediation=remediation,
+                    status="failed",
+                    details={
+                        "errors": result["errors"],
+                    },
+                )
+
         print(
             "\nNo files have been modified."
         )
@@ -499,10 +635,33 @@ def remediate_agent(
             print(
                 "Dry run failed."
             )
+
+            _write_audit(
+                "remediation_failed",
+                target,
+                status="failed",
+                details={
+                    "reason": "dry_run_failed",
+                },
+            )
+
             return 1
 
         print(
             "Dry run completed successfully."
+        )
+
+        _write_audit(
+            "remediation_completed",
+            target,
+            status="passed",
+            details={
+                "mode": "dry_run",
+                "patch_count": len(
+                    proposed_patches
+                ),
+                "files_modified": False,
+            },
         )
 
         return 0
@@ -536,7 +695,30 @@ def remediate_agent(
         print(
             "\nRemediation cancelled."
         )
+
+        _write_audit(
+            "remediation_cancelled",
+            target,
+            status="cancelled",
+            details={
+                "patch_count": len(
+                    proposed_patches
+                ),
+            },
+        )
+
         return 0
+
+    _write_audit(
+        "remediation_approved",
+        target,
+        status="approved",
+        details={
+            "patch_count": len(
+                proposed_patches
+            ),
+        },
+    )
 
     print(
         "\n=== Applying Patches ==="
@@ -565,7 +747,23 @@ def remediate_agent(
             print(
                 "Patch applied successfully."
             )
+
             applied_count += 1
+
+            _write_audit(
+                "patch_applied",
+                target,
+                finding=finding,
+                remediation=remediation,
+                status="applied",
+                details={
+                    "output": result.get(
+                        "output",
+                        "",
+                    ),
+                },
+            )
+
         else:
             print(
                 "Patch application failed."
@@ -578,6 +776,17 @@ def remediate_agent(
                     f"- {error}"
                 )
 
+            _write_audit(
+                "patch_application_failed",
+                target,
+                finding=finding,
+                remediation=remediation,
+                status="failed",
+                details={
+                    "errors": result["errors"],
+                },
+            )
+
     print(
         "\n=== Remediation Summary ==="
     )
@@ -589,6 +798,18 @@ def remediate_agent(
     )
 
     if applied_count == 0:
+        _write_audit(
+            "remediation_failed",
+            target,
+            status="failed",
+            details={
+                "reason": "no_patches_applied",
+                "patch_count": len(
+                    proposed_patches
+                ),
+            },
+        )
+
         return 1
 
     print(
@@ -624,6 +845,18 @@ def remediate_agent(
                 f"{error['message']}"
             )
 
+        _write_audit(
+            "verification_failed",
+            target,
+            status="failed",
+            details={
+                "reason": "scanner_errors",
+                "errors": verification_result[
+                    "errors"
+                ],
+            },
+        )
+
         return 1
 
     if remaining_blocking:
@@ -643,6 +876,25 @@ def remediate_agent(
                 f"{finding.line}"
             )
 
+        _write_audit(
+            "verification_failed",
+            target,
+            status="failed",
+            details={
+                "remaining_blocking_findings": [
+                    {
+                        "id": finding.finding_id,
+                        "tool": finding.tool,
+                        "rule": finding.rule,
+                        "severity": finding.severity,
+                        "file": finding.file,
+                        "line": finding.line,
+                    }
+                    for finding in remaining_blocking
+                ],
+            },
+        )
+
         return 1
 
     print(
@@ -651,6 +903,26 @@ def remediate_agent(
 
     print(
         "No HIGH or CRITICAL findings remain."
+    )
+
+    _write_audit(
+        "verification_passed",
+        target,
+        status="passed",
+        details={
+            "patches_applied": applied_count,
+        },
+    )
+
+    _write_audit(
+        "remediation_completed",
+        target,
+        status="passed",
+        details={
+            "mode": "apply",
+            "patches_applied": applied_count,
+            "files_modified": True,
+        },
     )
 
     return 0

@@ -21,7 +21,9 @@ def validate_patch(patch, target):
     lines = patch.splitlines()
 
     has_diff_header = False
+    has_target_header = False
     referenced_files = []
+    hunk_count = 0
 
     for line in lines:
         if line.startswith("--- "):
@@ -29,16 +31,32 @@ def validate_patch(patch, target):
             referenced_files.append(line[4:].strip())
 
         elif line.startswith("+++ "):
+            has_target_header = True
             referenced_files.append(line[4:].strip())
 
-    if not has_diff_header:
-        errors.append("Patch does not contain a unified diff header.")
+        elif line.startswith("@@ "):
+            hunk_count += 1
 
-    if not any(line.startswith("+++ ") for line in lines):
-        errors.append("Patch does not contain a target file.")
+    if not has_diff_header:
+        errors.append(
+            "Patch does not contain a unified diff header."
+        )
+
+    if not has_target_header:
+        errors.append(
+            "Patch does not contain a target file."
+        )
+
+    if hunk_count == 0:
+        errors.append(
+            "Patch does not contain a unified diff hunk."
+        )
 
     for file_name in referenced_files:
-        if file_name in {"/dev/null", "dev/null"}:
+        if file_name in {
+            "/dev/null",
+            "dev/null",
+        }:
             continue
 
         if file_name.startswith("a/") or file_name.startswith("b/"):
@@ -49,17 +67,19 @@ def validate_patch(patch, target):
         if file_path.is_absolute():
             resolved_file = file_path.resolve()
         else:
-            resolved_file = (target_path / file_path).resolve()
+            resolved_file = (
+                target_path / file_path
+            ).resolve()
 
         try:
             resolved_file.relative_to(target_path)
         except ValueError:
             errors.append(
-                f"Patch references a file outside the target: {file_name}"
+                "Patch references a file outside "
+                f"the target: {file_name}"
             )
 
     return {
         "valid": len(errors) == 0,
         "errors": errors,
     }
-    

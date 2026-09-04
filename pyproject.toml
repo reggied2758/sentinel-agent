@@ -9,6 +9,8 @@ description = "Agentic AI security platform for automated DevSecOps vulnerabilit
 requires-python = ">=3.13"
 dependencies = [
     "openai>=3.5.0",
+    "bandit>=1.9.0",
+    "pip-audit>=2.10.0",
 ]
 
 [project.scripts]
